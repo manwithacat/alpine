@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpine.js x-model.blur Fix Demo</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F" crossorigin="anonymous"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; line-height: 1.6; }
+        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #f8fafc; }
+        .subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 0.9rem; }
+        .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 900px; }
+        @media (max-width: 700px) { .demo-grid { grid-template-columns: 1fr; } }
+        .panel { background: #1e293b; border-radius: 12px; padding: 1.5rem; border: 1px solid #334155; }
+        .panel h2 { font-size: 1.1rem; margin-bottom: 0.25rem; }
+        .panel .desc { color: #94a3b8; font-size: 0.8rem; margin-bottom: 1rem; }
+        .status { padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1rem; }
+        .status.ok { background: #064e3b; color: #6ee7b7; border: 1px solid #065f46; }
+        .status.error { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; }
+        .status.waiting { background: #1e3a5f; color: #93c5fd; border: 1px solid #1e40af; }
+        label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.25rem; }
+        input[type="text"] { width: 100%; padding: 0.5rem 0.75rem; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #f1f5f9; font-size: 0.9rem; margin-bottom: 0.75rem; }
+        input[type="text"]:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.3); }
+        button { padding: 0.5rem 1rem; border-radius: 6px; border: none; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .btn-danger { background: #dc2626; color: white; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-secondary { background: #475569; color: white; }
+        .btn-secondary:hover { background: #334155; }
+        .actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+        .model-value { font-family: monospace; background: #0f172a; padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid #334155; font-size: 0.85rem; }
+        .log { margin-top: 1rem; font-size: 0.8rem; font-family: monospace; max-height: 120px; overflow-y: auto; }
+        .log-entry { padding: 0.2rem 0; border-bottom: 1px solid #1e293b; }
+        .log-entry.error-entry { color: #fca5a5; }
+        .log-entry.success-entry { color: #6ee7b7; }
+        .log-entry.info-entry { color: #93c5fd; }
+        .full-width { grid-column: 1 / -1; }
+        .step { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .step-num { color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+        .ref-link { color: #60a5fa; text-decoration: none; font-size: 0.85rem; }
+        .ref-link:hover { text-decoration: underline; }
+        code { background: #334155; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.8rem; }
+        .error-box { font-size: 0.8rem; color: #fca5a5; font-family: monospace; background: #1a0000; padding: 0.75rem; border-radius: 6px; border: 1px solid #7f1d1d; margin-top: 0.75rem; }
+        .fix-box { font-size: 0.8rem; color: #6ee7b7; font-family: monospace; background: #001a0e; padding: 0.75rem; border-radius: 6px; border: 1px solid #065f46; margin-top: 0.75rem; white-space: pre; line-height: 1.8; }
+        .note { background: #172033; border: 1px solid #1e3a5f; border-radius: 8px; padding: 1rem; margin-top: 1rem; font-size: 0.8rem; color: #93c5fd; }
+    </style>
+</head>
+<body>
+    <h1>Fix: x-model.blur cleanup crash on DOM removal</h1>
+    <p class="subtitle">
+        Alpine.js Discussion
+        <a class="ref-link" href="https://github.com/alpinejs/alpine/discussions/4738">#4738</a>
+        &mdash; Regression from PR
+        <a class="ref-link" href="https://github.com/alpinejs/alpine/pull/4729">#4729</a>
+    </p>
+
+    <div class="demo-grid">
+
+        <!-- Demo 1: The core bug -->
+        <div class="panel" x-data="{
+            show: true,
+            value: '',
+            log: [],
+            status: 'waiting',
+            addLog(msg, type) { this.log.unshift({ msg, type, time: new Date().toLocaleTimeString() }) }
+        }">
+            <h2>1. Core Bug: x-if removes x-model.blur input</h2>
+            <p class="desc">Type a value, blur the input, then click Remove. On current Alpine release this crashes.</p>
+
+            <div class="status" :class="status">
+                <span x-text="status === 'waiting' ? 'Try it: type, blur, then click Remove' : status === 'ok' ? 'Cleanup succeeded — no crash' : 'ERROR: ' + status"></span>
+            </div>
+
+            <form>
+                <template x-if="show">
+                    <div>
+                        <label>Input with x-model.blur (inside a &lt;form&gt;)</label>
+                        <input x-model.blur="value" type="text" placeholder="Type something, then click elsewhere...">
+                    </div>
+                </template>
+            </form>
+
+            <div style="margin-top: 0.75rem">
+                <label>Model value: <span class="model-value" x-text="value || '(empty)'"></span></label>
+            </div>
+
+            <div class="actions">
+                <button class="btn-danger" @click="
+                    try {
+                        show = false;
+                        addLog('Input removed via x-if toggle', 'info');
+                        $nextTick(() => {
+                            addLog('Alpine still responsive after cleanup', 'success');
+                            status = 'ok';
+                        })
+                    } catch(e) {
+                        addLog('CRASH: ' + e.message, 'error');
+                        status = e.message;
+                    }
+                " x-show="show">Remove Input</button>
+                <button class="btn-secondary" @click="
+                    show = true;
+                    value = '';
+                    status = 'waiting';
+                    addLog('Reset: input restored', 'info');
+                " x-show="!show">Reset</button>
+            </div>
+
+            <div class="log">
+                <template x-for="entry in log" :key="entry.time + entry.msg">
+                    <div class="log-entry" :class="entry.type + '-entry'" x-text="entry.time + ' ' + entry.msg"></div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Demo 2: Sibling removal + form submit -->
+        <div class="panel" x-data="{
+            showExtra: true,
+            name: '',
+            extra: '',
+            submitted: '',
+            log: [],
+            addLog(msg, type) { this.log.unshift({ msg, type, time: new Date().toLocaleTimeString() }) }
+        }">
+            <h2>2. Form submit after sibling removal</h2>
+            <p class="desc">Type in both fields, blur each, remove the second, then submit. The form's pending updates array must not be corrupted.</p>
+
+            <form @submit.prevent="
+                submitted = name + (extra ? ' + ' + extra : '');
+                addLog('Form submitted with: ' + submitted, 'success');
+            ">
+                <label>Name (x-model.blur)</label>
+                <input x-model.blur="name" type="text" placeholder="Type a name...">
+
+                <template x-if="showExtra">
+                    <div>
+                        <label>Extra field (x-model.blur) &mdash; will be removed</label>
+                        <input x-model.blur="extra" type="text" placeholder="Type something extra...">
+                    </div>
+                </template>
+
+                <div class="actions">
+                    <button type="button" class="btn-danger" @click="
+                        showExtra = false;
+                        addLog('Extra input removed from DOM', 'info');
+                    " x-show="showExtra">Remove Extra</button>
+                    <button type="submit" class="btn-primary">Submit Form</button>
+                    <button type="button" class="btn-secondary" @click="
+                        showExtra = true; name = ''; extra = ''; submitted = '';
+                        addLog('Reset', 'info');
+                    " x-show="!showExtra">Reset</button>
+                </div>
+            </form>
+
+            <div style="margin-top: 0.75rem">
+                <label>Submitted: <span class="model-value" x-text="submitted || '(not yet)'"></span></label>
+            </div>
+
+            <div class="log">
+                <template x-for="entry in log" :key="entry.time + entry.msg">
+                    <div class="log-entry" :class="entry.type + '-entry'" x-text="entry.time + ' ' + entry.msg"></div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Explanation panel -->
+        <div class="panel full-width" style="background: #172033;">
+            <h2>What happens and why</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem;">
+                <div>
+                    <h3 style="font-size: 0.95rem; color: #f87171; margin-bottom: 0.75rem;">Before fix (crashes)</h3>
+                    <div class="step"><span class="step-num" style="background: #dc2626;">1</span><span class="step-text"><code>&lt;input x-model.blur&gt;</code> inside a <code>&lt;form&gt;</code></span></div>
+                    <div class="step"><span class="step-num" style="background: #dc2626;">2</span><span class="step-text">Wrapped in <code>x-if</code> (or removed via Livewire morph)</span></div>
+                    <div class="step"><span class="step-num" style="background: #dc2626;">3</span><span class="step-text">Toggle removes the input from the DOM</span></div>
+                    <div class="step"><span class="step-num" style="background: #dc2626;">4</span><span class="step-text"><code>el.form</code> is now <code>null</code> &rarr; cleanup crashes</span></div>
+                    <div class="error-box">
+                        TypeError: Cannot read properties of null<br>(reading '_x_pendingModelUpdates')
+                    </div>
+                </div>
+                <div>
+                    <h3 style="font-size: 0.95rem; color: #34d399; margin-bottom: 0.75rem;">After fix (works)</h3>
+                    <div class="step"><span class="step-num" style="background: #059669;">1</span><span class="step-text">Capture <code>let form = el.form</code> at registration time</span></div>
+                    <div class="step"><span class="step-num" style="background: #059669;">2</span><span class="step-text">Cleanup callback uses the captured reference</span></div>
+                    <div class="step"><span class="step-num" style="background: #059669;">3</span><span class="step-text">Reference stays valid after element detachment</span></div>
+                    <div class="fix-box">// x-model.js line 87-92
+if (el.form) {
+  <span style="color: #fbbf24;">let form = el.form</span>  // captured here
+  let syncCallback = ...
+  if (!<span style="color: #fbbf24;">form</span>._x_pendingModelUpdates) ...
+  <span style="color: #fbbf24;">form</span>._x_pendingModelUpdates.push(...)
+  cleanup(() =&gt; <span style="color: #fbbf24;">form</span>._x_pending...) // safe
+}</div>
+                </div>
+            </div>
+            <div class="note">
+                <strong>Note:</strong> This page loads Alpine 3.14.9 from CDN (the current release with the bug).
+                The demos above will crash in the browser console when you remove the input.
+                After the fix is applied, these demos work without errors.
+                Open your browser DevTools console to observe the TypeError.
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>
