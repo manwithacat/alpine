@@ -1,0 +1,6 @@
+node_modules/
+dev_docs/
+demo-x-model-blur-fix.html
+verify-demo.mjs
+packages/
+_repro_*
